@@ -1,5 +1,9 @@
 using IdempotencyAPI.Application.IdempotencyService;
 using IdempotencyAPI.Application.Middleware;
+using RedLockNet;
+using RedLockNet.SERedis.Configuration;
+using RedLockNet.SERedis;
+using StackExchange.Redis;
 using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,7 +20,17 @@ builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration.GetConnectionString("RedisCacheUrl");
 });
-
+builder.Services.AddSingleton<IDistributedLockFactory>(provider =>
+{
+    var connectionMultiplexer = ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("RedisCacheUrl"));
+    return RedLockFactory.Create(
+        new List<RedLockMultiplexer> { connectionMultiplexer },
+        new RedLockRetryConfiguration(
+            retryCount: 3,
+            retryDelayMs: 200
+        )
+    );
+});
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 var app = builder.Build();
 app.UseMiddleware<IdempotencyMiddleware>();
